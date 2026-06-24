@@ -1,0 +1,193 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>百变怪芝士包</title>
+  <link rel="icon" type="image/png" href="/static/console/assets/app-icon.png" />
+  <link id="bootstrap-style" rel="stylesheet" href="/static/console/vendor/bootstrap.min.css" />
+  <link id="bootstrap-icons-style" rel="stylesheet" href="/static/console/vendor/bootstrap-icons.css" />
+  <link id="console-style" rel="stylesheet" href="/static/console/console.css?v=layout-r19" />
+  <script>
+    if (location.protocol === "file:") {
+      document.getElementById("bootstrap-style").href = "./vendor/bootstrap.min.css";
+      document.getElementById("bootstrap-icons-style").href = "./vendor/bootstrap-icons.css";
+      document.getElementById("console-style").href = "./console.css?v=layout-r19";
+    }
+  </script>
+</head>
+<body class="theme-neo">
+  <div class="app-shell">
+    <aside class="left-nav">
+      <div class="brand-row">
+        <img id="brand-icon" src="/static/console/assets/kb-icon.png" alt="KB" class="brand-icon" />
+        <div>
+          <div class="brand-title">百变怪芝士包</div>
+          <div class="brand-sub">Console</div>
+        </div>
+      </div>
+      <div class="nav-stack" id="tab-nav">
+        <button class="nav-tab active" data-tab="search-tab" type="button"><i class="bi bi-search"></i> 检索工作台</button>
+        <button class="nav-tab" data-tab="ask-tab" type="button"><i class="bi bi-chat-dots"></i> 大模型问答</button>
+        <button class="nav-tab" data-tab="editor-tab" type="button"><i class="bi bi-journal-richtext"></i> 知识编辑</button>
+        <button class="nav-tab" data-tab="settings-tab" type="button"><i class="bi bi-gear"></i> 系统设置</button>
+      </div>
+      <div class="health-box" id="health-panel">
+        <span class="status-dot"></span>
+        <div>
+          <div class="health-label">API 状态</div>
+          <div class="health-value" id="health-text">检查中...</div>
+        </div>
+      </div>
+      <div class="version-badge" id="app-version-badge">v–</div>
+    </aside>
+
+    <main class="main-area">
+      <!-- Phase 4 Batch C: 系统状态顶部 banner (fallback / warming_up / reindex) -->
+      <div id="system-banner" style="display:none;padding:10px 16px;margin-bottom:12px;border-radius:10px;font-size:13px;display:none;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span id="system-banner-text" style="flex:1 1 200px;"></span>
+        <a id="system-banner-action" href="/setup" style="color:inherit;text-decoration:underline;font-weight:600;display:none;">立即配置</a>
+      </div>
+
+      <section id="search-tab" class="tab-content active">
+        <header class="page-head neo-hero">
+          <h1>检索工作台</h1>
+          <p>知识检索、上下文阅读、编辑回填，一体化工作流</p>
+        </header>
+        <section class="search-panel">
+          <form id="search-form" class="modern-form">
+            <div class="search-main-row">
+              <div class="field field-query">
+                <label class="form-label form-label-sm">检索问题</label>
+                <input class="form-control uniform-input" name="query" placeholder="请输入要检索的问题..." required autocomplete="off" />
+              </div>
+              <button class="btn btn-primary uniform-input px-4" type="submit"><i class="bi bi-search me-1"></i>检索</button>
+              <button type="button" class="advanced-toggle-btn" id="toggle-filters"><i class="bi bi-sliders"></i> 高级筛选</button>
+            </div>
+            <div class="advanced-section" id="advanced-filters">
+              <div class="field"><label class="form-label form-label-sm">Domain（领域）</label><select class="form-select uniform-input" name="domain"><option value="work">work</option><option value="personal">personal</option></select></div>
+              <div class="field"><label class="form-label form-label-sm">Top K（返回条数）</label><input class="form-control uniform-input" name="top_k" type="number" min="1" max="50" value="8" /></div>
+              <div class="field"><label class="form-label form-label-sm">Actor（调用身份）</label><input class="form-control uniform-input" name="actor" value="manual" /></div>
+              <div class="field"><label class="form-label form-label-sm">Project（项目）</label><input class="form-control uniform-input" name="project" /></div>
+              <div class="field"><label class="form-label form-label-sm">Module（模块）</label><input class="form-control uniform-input" name="module" /></div>
+              <div class="field"><label class="form-label form-label-sm">Feature（功能）</label><input class="form-control uniform-input" name="feature" /></div>
+              <div class="field"><label class="form-label form-label-sm">Tags（标签）</label><input class="form-control uniform-input" name="tags" placeholder="security,token" /></div>
+              <div class="field"><label class="form-label form-label-sm">Source URI（来源地址）</label><input class="form-control uniform-input" name="source_uri" /></div>
+              <div class="field field-actions" style="grid-column:1 / -1;display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:16px;margin-top:8px;">
+                <div class="form-text m-0" id="search-hint">留空字段不会参与过滤。</div>
+                <button class="btn btn-sm btn-outline-secondary" type="reset" id="search-reset">重置</button>
+              </div>
+            </div>
+          </form>
+        </section>
+        <section class="workbench-grid">
+          <article class="panel panel-list"><div class="panel-head"><span>结果列表</span><span class="meta" id="result-meta">未查询</span></div><div class="panel-body panel-body-list"><div id="result-list" class="result-list"></div></div></article>
+          <article class="panel panel-detail"><div class="panel-head"><span>详情</span><div class="d-flex gap-2"><button class="btn btn-sm btn-outline-primary" id="load-editor-btn" disabled>载入到编辑器</button><button class="btn btn-sm btn-outline-danger" id="delete-item-btn" disabled><i class="bi bi-trash me-1"></i>删除</button></div></div><div class="panel-body" id="detail-panel"><div class="empty-note">在左侧选择一条结果查看详情。</div></div></article>
+        </section>
+      </section>
+
+      <section id="ask-tab" class="tab-content">
+        <header class="page-head neo-hero"><h1>大模型问答</h1><p>基于知识库上下文进行问答，支持来源片段回溯。</p></header>
+        <div class="panel panel-editor"><div class="panel-body p-4">
+          <form id="ask-form" class="row g-3">
+            <div class="col-12"><label class="form-label">问题</label><textarea class="form-control" id="ask-question" rows="3" placeholder="例如：登录失败 401 的排查步骤是什么？" required></textarea></div>
+            <div class="col-6"><label class="form-label">Domain（领域）</label><select class="form-select" id="ask-domain"><option value="work">work</option><option value="personal">personal</option></select></div>
+            <div class="col-6"><label class="form-label">Project（可选）</label><input class="form-control" id="ask-project" /></div>
+            <div class="col-6"><label class="form-label">返回片段数（Top K Chunks）</label><input class="form-control" id="ask-topk" type="number" min="1" max="20" value="5" /></div>
+            <div class="col-6"><label class="form-label">调用身份（Actor）</label><input class="form-control" id="ask-actor" value="manual" /></div>
+            <div class="col-12 d-flex gap-2"><button class="btn btn-primary" type="submit">提交问答</button></div>
+          </form>
+          <hr />
+          <div id="ask-answer" class="mb-3 empty-note">暂无回答。</div>
+          <div id="ask-chunks" class="empty-note">暂无引用片段。</div>
+        </div></div>
+      </section>
+
+      <section id="editor-tab" class="tab-content">
+        <header class="page-head neo-hero"><h1>知识编辑</h1><p>结构化录入、版本化更新、可审计的知识沉淀。</p></header>
+        <div class="panel panel-editor"><div class="panel-head"><span>编辑表单</span></div><div class="panel-body p-4">
+          <form id="upsert-form" class="row g-4">
+            <div class="col-12"><label class="form-label">Title（标题）*</label><input class="form-control form-control-lg" name="title" required /></div>
+            <div class="col-12 col-md-6"><label class="form-label">知识条目 ID（knowledge_item_id）</label><input class="form-control" name="knowledge_item_id" /></div>
+            <div class="col-6 col-md-3"><label class="form-label">领域（Domain）*</label><select class="form-select" name="domain"><option value="work">work</option><option value="personal">personal</option></select></div>
+            <div class="col-6 col-md-3"><label class="form-label">知识类型（Type）*</label><select class="form-select" name="type"><option value="decision">decision</option><option value="runbook">runbook</option><option value="lesson">lesson</option><option value="fact">fact</option></select></div>
+            <div class="col-12 col-md-6"><label class="form-label">项目（Project）*</label><input class="form-control" name="project" required /></div>
+            <div class="col-12 col-md-6"><label class="form-label">作者（Author）*</label><input class="form-control" name="author" value="manual" required /></div>
+            <div class="col-12 col-md-4"><label class="form-label">模块（Module）</label><input class="form-control" name="module" /></div>
+            <div class="col-12 col-md-4"><label class="form-label">功能（Feature）</label><input class="form-control" name="feature" /></div>
+            <div class="col-12 col-md-4"><label class="form-label">标签（Tags）</label><input class="form-control" name="tags" placeholder="security,token" /></div>
+            <div class="col-12"><label class="form-label">来源地址（Source URI）</label><input class="form-control" name="source_uri" /></div>
+            <div class="col-12"><label class="form-label">变更说明（Change Note）</label><input class="form-control" name="change_note" /></div>
+            <div class="col-12"><label class="form-label">摘要（Summary）</label><textarea class="form-control" name="summary" rows="2"></textarea></div>
+            <div class="col-12"><label class="form-label">正文内容（Content Markdown）*</label><textarea class="form-control mono" name="content_markdown" rows="12" required></textarea></div>
+            <div class="col-12 border-top pt-4 mt-2"><div class="row align-items-center"><div class="col-12 col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="public_read" name="public_read" checked><label class="form-check-label fw-bold" for="public_read">公开读取（Public Read）</label></div></div><div class="col-12 col-md-8"><input class="form-control" name="acl_actors" placeholder="actor1,actor2" /></div></div></div>
+            <div class="col-12 d-flex gap-3 mt-2"><button class="btn btn-success px-4" type="submit"><i class="bi bi-floppy me-2"></i>保存并入库</button><button class="btn btn-outline-secondary px-4" type="reset">清空表单</button></div>
+          </form>
+          <div class="alert mt-4 mb-0 d-none" id="upsert-alert"></div>
+        </div></div>
+      </section>
+
+      <section id="settings-tab" class="tab-content">
+        <header class="page-head neo-hero"><h1>系统设置</h1><p>设置端口、主题和大模型参数（入库保存）。</p></header>
+        <div class="panel panel-editor"><div class="panel-body p-4">
+          <form id="settings-form" class="row g-3">
+            <div class="col-md-4"><label class="form-label">服务端口</label><input class="form-control" id="cfg_service_port" type="number" min="1" max="65535" value="18000" /></div>
+            <div class="col-md-8"><label class="form-label">API Base URL（自动生成）</label><input class="form-control" id="cfg_api_base_url" readonly /></div>
+            <div class="col-md-6"><label class="form-label">界面主题（UI Theme）</label><select class="form-select" id="cfg_ui_theme"><option value="linear">linear</option><option value="glass">glass</option><option value="neo">neo</option></select></div>
+            <div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="cfg_llm_enabled"><label class="form-check-label" for="cfg_llm_enabled">启用大模型问答</label></div></div>
+            <div class="col-12"><label class="form-label">大模型密钥（LLM API Key）</label><input class="form-control" id="cfg_llm_api_key" type="password" /></div>
+            <div class="col-12"><label class="form-label">大模型地址（LLM Base URL）</label><input class="form-control" id="cfg_llm_base_url" /></div>
+            <div class="col-md-6"><label class="form-label">大模型名称（LLM Model）</label><input class="form-control" id="cfg_llm_model" /></div>
+            <div class="col-md-2"><label class="form-label">超时（Timeout）</label><input class="form-control" id="cfg_llm_timeout_sec" type="number" min="1" max="300" /></div>
+            <div class="col-md-2"><label class="form-label">温度（Temp）</label><input class="form-control" id="cfg_llm_temperature" type="number" step="0.1" min="0" max="2" /></div>
+            <div class="col-md-2"><label class="form-label">最大令牌数（Max Tokens）</label><input class="form-control" id="cfg_llm_max_tokens" type="number" min="1" max="8192" /></div>
+
+            <!-- Embedding 向量化模型 -->
+            <div class="col-12"><h6 class="text-muted border-bottom pb-1 mb-1 mt-2" style="font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;">Embedding 向量化模型</h6></div>
+            <div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="cfg_embedding_enabled"><label class="form-check-label" for="cfg_embedding_enabled">启用 Embedding API</label></div></div>
+            <div class="col-12"><label class="form-label">Embedding 密钥（留空则使用上方 LLM API Key）</label><input class="form-control" id="cfg_embedding_api_key" type="password" /></div>
+            <div class="col-12"><label class="form-label">Embedding 地址（留空则使用上方 LLM Base URL）</label><input class="form-control" id="cfg_embedding_base_url" /></div>
+            <div class="col-md-6"><label class="form-label">模型名称（Model Name）</label><input class="form-control" id="cfg_embedding_model" /></div>
+            <div class="col-md-4"><label class="form-label">向量维度（Dim）</label><input class="form-control" id="cfg_embedding_dim" type="number" min="1" max="65536" /></div>
+            <div class="col-md-4"><label class="form-label">超时秒数（Timeout）</label><input class="form-control" id="cfg_embedding_timeout_sec" type="number" min="1" max="300" /></div>
+
+            <!-- Rerank 召回重排 -->
+            <div class="col-12"><h6 class="text-muted border-bottom pb-1 mb-1 mt-2" style="font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;">Rerank 召回重排</h6></div>
+            <div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="cfg_rerank_enabled"><label class="form-check-label" for="cfg_rerank_enabled">启用 Rerank API</label></div></div>
+            <div class="col-12"><label class="form-label">Rerank 密钥（留空则使用 LLM Key）</label><input class="form-control" id="cfg_rerank_api_key" type="password" /></div>
+            <div class="col-12"><label class="form-label">Rerank 地址（留空则使用 LLM URL）</label><input class="form-control" id="cfg_rerank_base_url" /></div>
+            <div class="col-md-6"><label class="form-label">模型名称（Model Name）</label><input class="form-control" id="cfg_rerank_model" /></div>
+            <div class="col-md-4"><label class="form-label">接口路径（API Path）</label><input class="form-control" id="cfg_rerank_path" placeholder="/rerank" /></div>
+            <div class="col-md-4"><label class="form-label">超时秒数（Timeout）</label><input class="form-control" id="cfg_rerank_timeout_sec" type="number" min="1" max="300" /></div>
+
+            <!-- 写入增强 -->
+            <div class="col-12"><h6 class="text-muted border-bottom pb-1 mb-1 mt-2" style="font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;">写入增强</h6></div>
+            <div class="col-md-6 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="cfg_enrichment_enabled"><label class="form-check-label" for="cfg_enrichment_enabled">写入时启用 LLM 自动摘要与标签提取</label></div></div>
+
+            <div class="col-12 d-flex gap-2">
+              <button class="btn btn-primary" type="submit">保存配置</button>
+              <button class="btn btn-outline-secondary" type="button" id="cfg_save_restart">保存并重启</button>
+              <span id="cfg_status" class="empty-note"></span>
+            </div>
+          </form>
+        </div></div>
+      </section>
+    </main>
+  </div>
+  <script id="marked-script" src="/static/console/vendor/marked.min.js"></script>
+  <script>
+    if (location.protocol === "file:") {
+      document.getElementById("marked-script").src = "./vendor/marked.min.js";
+      const icon = document.getElementById("brand-icon");
+      if (icon) icon.src = "./assets/kb-icon.png";
+    }
+    (function loadConsoleScript() {
+      const s = document.createElement("script");
+      s.src = location.protocol === "file:"
+        ? "./console.js?v=layout-r19"
+        : "/static/console/console.js?v=layout-r19";
+      document.body.appendChild(s);
+    })();
+  </script>
+</body>
+</html>

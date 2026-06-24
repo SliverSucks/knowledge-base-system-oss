@@ -1,0 +1,10 @@
+﻿# Local install mode minimal dependencies (no Docker, no psycopg)
+# Usage: pip install -r requirements-local.txt && python scripts/start-local.py
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic==2.11.7
+mcp>=1.0.0,<2.0.0
+httpx==0.28.1
+prometheus-client>=0.21.0
+# Optional vector search client. If omitted, system degrades to keyword search.
+qdrant-client==1.16.0

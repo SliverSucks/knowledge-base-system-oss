@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knowledge Base 设置</title>
+  <link rel="icon" type="image/png" href="/static/console/assets/app-icon.png" />
+  <style>
+    :root { --bg:#0b1020; --panel:#111827d1; --line:#334155; --text:#e5e7eb; --sub:#94a3b8; --brand:#8b5cf6; --ok:#22c55e; --err:#ef4444; }
+    * { box-sizing: border-box; }
+    body { margin:0; color:var(--text); font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:linear-gradient(180deg,#0b1020,#111a33); padding:24px; }
+    .wrap { max-width: 980px; margin:0 auto; }
+    .card { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:20px; }
+    h1 { margin:0 0 6px; font-size:28px; }
+    .sub { margin:0 0 14px; color:var(--sub); }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .span-2 { grid-column:1 / -1; }
+    label { display:block; margin-bottom:6px; font-size:13px; color:var(--sub); font-weight:600; }
+    input, select { width:100%; height:42px; border:1px solid var(--line); border-radius:10px; background:#0f172a; color:var(--text); padding:0 10px; }
+    .switch { display:flex; align-items:center; gap:8px; height:42px; }
+    .actions { margin-top:16px; display:flex; gap:10px; align-items:center; }
+    button, .link { height:40px; border-radius:10px; border:0; padding:0 14px; color:#fff; background:linear-gradient(135deg,#8b5cf6,#6366f1); cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; }
+    .status { margin-top:10px; min-height:20px; color:var(--sub); font-size:13px; }
+    .ok { color:var(--ok); } .err { color:var(--err); }
+    .warn { color:#f59e0b; }
+    /* Embedding 服务 分区 */
+    .embed-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+    .embed-row span.kv { background:#0f172a; border:1px solid var(--line); padding:6px 10px; border-radius:8px; font-size:13px; color:var(--text); }
+    .embed-row span.kv b { color:var(--sub); font-weight:400; margin-right:6px; }
+    .embed-row .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--err); margin-right:4px; }
+    .embed-row .dot.running { background:var(--ok); }
+    .embed-row .dot.warming { background:#f59e0b; }
+    .reindex-banner { margin-top:14px; padding:10px 14px; border-radius:10px; background:#1e293b; border:1px solid #f59e0b; color:var(--text); font-size:13px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .reindex-banner .bar { flex:1 1 200px; height:6px; background:#0f172a; border-radius:99px; overflow:hidden; min-width:140px; }
+    .reindex-banner .bar > div { height:100%; width:0%; background:#f59e0b; transition:width .3s; }
+    /* Modal */
+    .modal-mask { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; }
+    .modal-mask.open { display:flex; }
+    .modal { background:#0b1020; border:1px solid var(--line); border-radius:14px; padding:22px; max-width:520px; width:92%; color:var(--text); }
+    .modal h2 { margin:0 0 10px; font-size:20px; }
+    .modal p { margin:6px 0; color:var(--sub); font-size:14px; line-height:1.6; }
+    .modal .stat { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0; }
+    .modal .stat span { background:#0f172a; border:1px solid var(--line); padding:6px 10px; border-radius:8px; font-size:13px; }
+    .modal input.confirm-input { margin-top:10px; width:100%; height:42px; border:1px solid var(--line); border-radius:8px; background:#0f172a; color:var(--text); padding:0 12px; font-family:monospace; }
+    .modal .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
+    .modal button.cancel { background:#1e293b; border:1px solid var(--line); }
+    .modal button.danger { background:#dc2626; }
+    @media (max-width: 760px) { .grid { grid-template-columns:1fr; } .span-2{grid-column:auto;} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>系统配置</h1>
+      <p class="sub">所有配置写入数据库，重启后保留。</p>
+
+      <div class="grid">
+        <div>
+          <label for="service_port">Service Port</label>
+          <input id="service_port" type="number" min="1" max="65535" value="18000" />
+        </div>
+        <div class="span-2">
+          <label for="api_base_url">API Base URL</label>
+          <input id="api_base_url" readonly />
+        </div>
+        <div>
+          <label for="ui_theme">UI Theme</label>
+          <select id="ui_theme">
+            <option value="linear">linear</option>
+            <option value="glass">glass</option>
+            <option value="neo">neo</option>
+          </select>
+        </div>
+        <div>
+          <label>LLM 启用</label>
+          <div class="switch"><input id="llm_enabled" type="checkbox" /> <span>启用大模型问答</span></div>
+        </div>
+        <div class="span-2">
+          <label for="llm_api_key">LLM API Key</label>
+          <input id="llm_api_key" type="password" placeholder="sk-..." />
+        </div>
+        <div class="span-2">
+          <label for="llm_base_url">LLM Base URL</label>
+          <input id="llm_base_url" />
+        </div>
+        <div>
+          <label for="llm_model">LLM Model</label>
+          <input id="llm_model" />
+        </div>
+        <div>
+          <label for="llm_timeout_sec">Timeout (sec)</label>
+          <input id="llm_timeout_sec" type="number" min="1" max="300" step="1" />
+        </div>
+        <div>
+          <label for="llm_temperature">Temperature</label>
+          <input id="llm_temperature" type="number" min="0" max="2" step="0.1" />
+        </div>
+        <div>
+          <label for="llm_max_tokens">Max Tokens</label>
+          <input id="llm_max_tokens" type="number" min="1" max="8192" step="1" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="save" type="button">保存配置</button>
+        <a class="link" href="/console" target="_blank">打开控制台</a>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+
+    <!-- Embedding 服务 分区 (Phase 4 / AC22 / AC23) -->
+    <div class="card" style="margin-top:16px;">
+      <h1 style="font-size:22px;">Embedding 服务</h1>
+      <p class="sub">控制语义检索的 embedding 模型。切模型 / 重建索引会让现有向量失效,操作前必须确认。</p>
+
+      <div class="embed-row" id="embed-row-status">
+        <span class="kv"><b>模式</b><span id="embed-mode">-</span></span>
+        <span class="kv"><b>模型</b><span id="embed-model">-</span></span>
+        <span class="kv"><span class="dot" id="embed-dot"></span><span id="embed-state">-</span></span>
+        <span class="kv"><b>port</b><span id="embed-port">-</span></span>
+        <span class="kv"><b>重启次数</b><span id="embed-restart">0</span></span>
+      </div>
+
+      <div class="actions" style="margin-top:14px;">
+        <a class="link" href="/setup">重新配置</a>
+        <button id="btn-reindex" type="button">重建索引</button>
+        <button id="btn-view-logs" class="secondary" type="button" style="background:#1e293b;border:1px solid var(--line);">查看安装日志</button>
+      </div>
+
+      <!-- reindex 进度 banner (AC23 中止按钮) -->
+      <div id="reindex-banner" class="reindex-banner" style="display:none;">
+        <span id="reindex-text">正在重建索引...</span>
+        <div class="bar"><div id="reindex-bar"></div></div>
+        <button id="btn-reindex-abort" class="danger" type="button" style="background:#dc2626;height:34px;padding:0 12px;font-size:13px;">中止并回滚</button>
+      </div>
+
+      <div id="embed-status" class="status"></div>
+    </div>
+  </div>
+
+  <!-- Reindex 强制确认对话框 (AC22) -->
+  <div class="modal-mask" id="reindex-modal">
+    <div class="modal">
+      <h2>重建向量索引</h2>
+      <p>此操作将<b>重建所有 chunk 的向量</b>。重建期间语义检索会降级到关键词检索。</p>
+      <div class="stat" id="reindex-stat">
+        <span>chunk 数: <b id="modal-chunks">-</b></span>
+        <span>预计耗时: <b id="modal-eta">-</b></span>
+        <span id="modal-block-warn" style="border-color:#f59e0b;color:#f59e0b; display:none;">⚠ 期间写类 API 会返 202</span>
+      </div>
+      <p style="margin-top:14px;">在下方输入 <code style="color:#fbbf24;">I-CONFIRM-OVERWRITE</code> 确认:</p>
+      <input class="confirm-input" id="confirm-input" placeholder="I-CONFIRM-OVERWRITE" />
+      <div class="modal-actions">
+        <button class="cancel" id="modal-cancel" type="button">取消</button>
+        <button class="danger" id="modal-go" type="button">确认重建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 查看日志对话框 -->
+  <div class="modal-mask" id="logs-modal">
+    <div class="modal" style="max-width:680px;">
+      <h2>安装日志</h2>
+      <p>install_status.json + pip.log 路径在本机数据目录下,可直接打开。</p>
+      <pre id="logs-content" style="background:#0f172a;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:340px;overflow:auto;font-size:12px;color:var(--sub);white-space:pre-wrap;">加载中...</pre>
+      <div class="modal-actions">
+        <button class="cancel" id="logs-close" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const fields = [
+      "service_port","api_base_url","ui_theme","llm_enabled","llm_api_key","llm_base_url",
+      "llm_model","llm_timeout_sec","llm_temperature","llm_max_tokens"
+    ];
+    const $status = document.getElementById("status");
+    const $save = document.getElementById("save");
+
+    function show(msg, cls) {
+      $status.className = "status" + (cls ? " " + cls : "");
+      $status.textContent = msg;
+    }
+
+    function readPayload() {
+      const p = {};
+      for (const k of fields) {
+        const el = document.getElementById(k);
+        p[k] = el.type === "checkbox" ? !!el.checked : el.value;
+      }
+      p.llm_timeout_sec = Number(p.llm_timeout_sec || 30);
+      p.llm_temperature = Number(p.llm_temperature || 0.2);
+      p.llm_max_tokens = Number(p.llm_max_tokens || 1024);
+      p.service_port = Number(p.service_port || 18000);
+      p.api_base_url = `http://127.0.0.1:${p.service_port}`;
+      p.grafana_url = "http://127.0.0.1:3000";
+      return p;
+    }
+
+    function fill(data) {
+      for (const k of fields) {
+        const el = document.getElementById(k);
+        if (!el) continue;
+        if (el.type === "checkbox") el.checked = !!data[k];
+        else el.value = data[k] ?? "";
+      }
+      const p = Number(data.service_port || 18000);
+      document.getElementById("service_port").value = p;
+      document.getElementById("api_base_url").value = `http://127.0.0.1:${p}`;
+    }
+
+    async function loadConfig() {
+      try {
+        const r = await fetch("/v1/system/config");
+        if (!r.ok) throw new Error("load failed");
+        const d = await r.json();
+        fill(d);
+        show(d.updated_at ? `Last updated: ${d.updated_at}` : "No saved config yet");
+      } catch {
+        show("Failed to load config", "err");
+      }
+    }
+
+    $save.addEventListener("click", async () => {
+      show("Saving...");
+      try {
+        const r = await fetch("/v1/system/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(readPayload()),
+        });
+        if (!r.ok) throw new Error("save failed");
+        const d = await r.json();
+        fill(d);
+        show(`Saved: ${d.updated_at || ""}. If port changed, restart and open http://127.0.0.1:${d.service_port || readPayload().service_port}/console`, "ok");
+      } catch {
+        show("Save failed, please check input and service status", "err");
+      }
+    });
+
+    loadConfig();
+
+    // === Phase 4 Batch B: Embedding 服务分区 ===
+    const $embedStatus = document.getElementById("embed-status");
+    const setEmbedStatus = (msg, cls = "") => {
+      $embedStatus.textContent = msg;
+      $embedStatus.className = "status" + (cls ? " " + cls : "");
+    };
+
+    async function refreshEmbeddingStatus() {
+      try {
+        const r = await fetch("/v1/system/embedding-service/status");
+        if (!r.ok) return;
+        const s = await r.json();
+        document.getElementById("embed-mode").textContent = s.mode || "-";
+        document.getElementById("embed-model").textContent = s.model_id || "-";
+        document.getElementById("embed-port").textContent = s.port || "-";
+        document.getElementById("embed-restart").textContent = s.restart_count || 0;
+        const dot = document.getElementById("embed-dot");
+        const stateEl = document.getElementById("embed-state");
+        dot.className = "dot";
+        if (s.running && !s.warming_up) {
+          dot.classList.add("running");
+          stateEl.textContent = "运行中";
+        } else if (s.warming_up) {
+          dot.classList.add("warming");
+          stateEl.textContent = "加载中";
+        } else if (s.installed) {
+          stateEl.textContent = "已停止";
+        } else {
+          stateEl.textContent = "未安装";
+        }
+      } catch (e) {
+        // 失败不打扰
+      }
+    }
+    refreshEmbeddingStatus();
+    setInterval(refreshEmbeddingStatus, 8000);
+
+    // === Reindex 确认对话框 (AC22) ===
+    const $modal = document.getElementById("reindex-modal");
+    document.getElementById("btn-reindex").addEventListener("click", async () => {
+      // 拉 preview 数据
+      document.getElementById("modal-chunks").textContent = "...";
+      document.getElementById("modal-eta").textContent = "...";
+      document.getElementById("modal-block-warn").style.display = "none";
+      document.getElementById("confirm-input").value = "";
+      $modal.classList.add("open");
+
+      try {
+        const r = await fetch("/v1/system/reindex-preview");
+        if (r.ok) {
+          const p = await r.json();
+          document.getElementById("modal-chunks").textContent = p.active_chunks;
+          const eta = p.estimated_seconds || 1;
+          const etaText = eta >= 60 ? `~${Math.ceil(eta / 60)} 分钟` : `~${eta} 秒`;
+          document.getElementById("modal-eta").textContent = etaText;
+          if (p.threshold_blocked_writes) {
+            document.getElementById("modal-block-warn").style.display = "inline-block";
+          }
+        }
+      } catch (e) {
+        // 用默认占位即可,不阻止确认流程
+      }
+    });
+    document.getElementById("modal-cancel").addEventListener("click", () => {
+      $modal.classList.remove("open");
+    });
+    document.getElementById("modal-go").addEventListener("click", async () => {
+      const confirm = document.getElementById("confirm-input").value.trim();
+      if (confirm !== "I-CONFIRM-OVERWRITE") {
+        alert("请准确输入 I-CONFIRM-OVERWRITE");
+        return;
+      }
+      $modal.classList.remove("open");
+      setEmbedStatus("正在启动重建...", "");
+      const r = await fetch("/v1/system/rebuild-vector-index", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm, batch_size: 100 }),
+      });
+      if (!r.ok && r.status !== 202) {
+        const e = await r.json().catch(() => ({}));
+        setEmbedStatus("启动重建失败: " + (e.detail || r.status), "err");
+        return;
+      }
+      setEmbedStatus("已启动重建任务", "ok");
+      pollReindexStatus();
+    });
+
+    // === Reindex 进度 banner + 中止 (AC23) ===
+    const $banner = document.getElementById("reindex-banner");
+    let reindexPollTimer = null;
+    async function pollReindexStatus() {
+      if (reindexPollTimer) clearInterval(reindexPollTimer);
+      const tick = async () => {
+        try {
+          const r = await fetch("/v1/system/rebuild-vector-index/status");
+          if (!r.ok) return;
+          const s = await r.json();
+          if (s.status === "running") {
+            $banner.style.display = "flex";
+            const pct = s.total ? (s.processed / s.total) : 0;
+            document.getElementById("reindex-bar").style.width = (pct * 100).toFixed(0) + "%";
+            document.getElementById("reindex-text").textContent =
+              `重建中 ${s.processed}/${s.total}` + (s.threshold_blocked_writes ? "(写 API 暂返 202)" : "");
+          } else if (s.status === "completed") {
+            $banner.style.display = "none";
+            setEmbedStatus("重建完成", "ok");
+            clearInterval(reindexPollTimer);
+            reindexPollTimer = null;
+          } else if (s.status === "failed" || s.status === "aborted") {
+            $banner.style.display = "none";
+            setEmbedStatus("重建" + (s.status === "aborted" ? "已中止 (旧索引已回滚)" : "失败: " + (s.error || "")), s.status === "aborted" ? "warn" : "err");
+            clearInterval(reindexPollTimer);
+            reindexPollTimer = null;
+          } else {
+            $banner.style.display = "none";
+          }
+        } catch (e) { /* 网络抖动忽略 */ }
+      };
+      tick();
+      reindexPollTimer = setInterval(tick, 2000);
+    }
+    // 启动时检查是否已有 reindex 在跑(刷新页面场景)
+    pollReindexStatus();
+
+    document.getElementById("btn-reindex-abort").addEventListener("click", async () => {
+      if (!confirm("确定要中止重建并回滚到旧索引吗?")) return;
+      const r = await fetch("/v1/system/rebuild-vector-index/abort", { method: "POST" });
+      if (r.ok) {
+        setEmbedStatus("已发送中止请求", "warn");
+      } else {
+        setEmbedStatus("中止失败: " + r.status, "err");
+      }
+    });
+
+    // === 查看日志对话框 ===
+    const $logsModal = document.getElementById("logs-modal");
+    document.getElementById("btn-view-logs").addEventListener("click", async () => {
+      const el = document.getElementById("logs-content");
+      el.textContent = "加载中...";
+      $logsModal.classList.add("open");
+      try {
+        // /v1/system/embedding-service/install-status 暂未提供独立 endpoint,
+        // 退化方案:展示 status snapshot 给用户(够用)
+        const r = await fetch("/v1/system/embedding-service/status");
+        const s = await r.json();
+        el.textContent = JSON.stringify(s, null, 2)
+          + "\n\n--- 详细日志位置 ---\n"
+          + "runtime/install_status.json\nlogs/pip.log\nlogs/infinity.log";
+      } catch (e) {
+        el.textContent = "加载失败: " + e.message;
+      }
+    });
+    document.getElementById("logs-close").addEventListener("click", () => {
+      $logsModal.classList.remove("open");
+    });
+  </script>
+</body>
+</html>

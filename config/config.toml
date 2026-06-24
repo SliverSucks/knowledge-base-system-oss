@@ -1,0 +1,12 @@
+# 百变怪芝士包 - 直装版引导配置
+# 此文件仅存放启动必需的引导参数（端口、数据路径）
+# 其余运行时配置（LLM、Embedding、Rerank、主题）存储在数据库中，通过 /settings 页面修改
+
+[server]
+host = "127.0.0.1"
+port = 18000
+
+[data]
+sqlite_path = "data/knowledge.db"
+qdrant_local_path = "data/qdrant_local"
+vector_enabled = true

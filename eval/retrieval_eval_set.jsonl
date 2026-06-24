@@ -1,0 +1,3 @@
+{"query":"refresh token rotation","domain":"work","project":"project-a","expected_titles":["Private auth note","Auth token strategy"]}
+{"query":"payment intent status","domain":"work","project":"project-a","expected_titles":["Payment API Spec"]}
+{"query":"jwt strategy","domain":"work","project":"project-a","expected_titles":["Auth token strategy"]}
