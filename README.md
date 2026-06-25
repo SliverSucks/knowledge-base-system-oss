@@ -6,7 +6,9 @@
 
 面向工程研发的本地知识记忆系统，让 Claude Code / Codex 在编码时能检索历史决策、排障记录和工程规范。
 
-<!-- TODO: 此处插入 demo gif（装好 → 导入文档 → Claude Code 通过 MCP 召回命中） -->
+![AI 编码助手通过 MCP 召回历史决策与修复记忆](assets/readme/hero-flywheel.png)
+
+> Claude Code 通过 MCP 召回当天刚落档的 bug 修复记忆——人写的知识，AI 当天可查。
 
 ---
 
