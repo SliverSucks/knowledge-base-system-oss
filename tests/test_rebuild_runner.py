@@ -21,6 +21,7 @@ from app.services.maintenance import (
     MaintenanceReason,
 )
 from app.services.rebuild_runner import (
+    EmbeddingNotReady,
     RebuildAlreadyRunning,
     RebuildRunner,
     RebuildStatus,
@@ -237,3 +238,81 @@ def test_progress_cb_updates_processed_field():
     runner.join(timeout=2.0)
     assert snapshots == [10, 50, 100]
     assert runner.state().processed == 100
+
+
+# ---------------------------------------------------------------------------
+# Embedding 就绪探针（bug A）
+# ---------------------------------------------------------------------------
+
+def test_probe_failure_blocks_start_without_side_effects():
+    """probe 抛 EmbeddingNotReady → runner 不进 RUNNING、不备份、不置 maintenance。
+
+    装机后 infinity warmup 期间用户抢点的真实场景：旧索引备份不能被抹掉，
+    maintenance flag 不能被设上（否则写类 API 全 202 死锁直到下次成功 rebuild）。
+    """
+    flag = MaintenanceFlag()
+    runner = RebuildRunner(maintenance_flag=flag)
+    backup_called = []
+    rebuild_called = []
+
+    def probe(_vi):
+        raise EmbeddingNotReady("infinity 7687 not reachable")
+
+    with pytest.raises(EmbeddingNotReady):
+        runner.start(
+            repo=FakeRepo(10000), vector_index=FakeVectorIndex(),
+            qdrant_local_path="/tmp/x", backup_root="/tmp/y",
+            threshold_chunks=5000,
+            probe_fn=probe,
+            rebuild_fn=lambda *a, **k: rebuild_called.append(True),
+            backup_fn=lambda s, d: backup_called.append((s, d)),
+            restore_fn=lambda b, q: None,
+        )
+
+    assert runner.state().status == RebuildStatus.IDLE.value
+    assert flag.is_active() is False, "probe 失败不能设 maintenance flag"
+    assert backup_called == [], "probe 失败前不应触发备份"
+    assert rebuild_called == [], "probe 失败前不应触发 rebuild_fn"
+
+
+def test_probe_pass_allows_start():
+    """probe 不抛 → 正常进入 RUNNING 流程。"""
+    runner = _make_runner()
+    probe_calls = []
+
+    def probe(vi):
+        probe_calls.append(vi)
+
+    def rebuild(repo, vi, *, batch_size, progress_cb):
+        progress_cb(1, 1)
+
+    runner.start(
+        repo=FakeRepo(100), vector_index=FakeVectorIndex(),
+        qdrant_local_path="/tmp/x", backup_root="/tmp/y",
+        threshold_chunks=1000,
+        probe_fn=probe,
+        rebuild_fn=rebuild,
+        backup_fn=lambda s, d: None, restore_fn=lambda b, q: None,
+    )
+    runner.join(timeout=2.0)
+    assert len(probe_calls) == 1
+    assert runner.state().status == RebuildStatus.COMPLETED.value
+
+
+def test_default_probe_skips_when_not_api_embedding():
+    """默认 probe 在 HashEmbedding / 无 embedding 场景跳过（不抛）。
+
+    HashEmbedding 兜底场景由 rebuild_index 自身 strict 校验拦截，probe 不重复。
+    """
+    from app.services.rebuild_runner import _default_embedding_probe
+
+    # 无 embedding 属性（测试 stub 常态）
+    _default_embedding_probe(FakeVectorIndex())
+
+    # HashEmbedding（生产环境 disabled mode）
+    from app.vector_index import HashEmbedding
+
+    class VIWithHash:
+        embedding = HashEmbedding(dim=384)
+
+    _default_embedding_probe(VIWithHash())

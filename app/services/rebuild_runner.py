@@ -50,6 +50,15 @@ class RebuildAborted(Exception):
     """progress_cb 检测到 abort flag 时抛，rebuild_index 不捕获，runner 接住。"""
 
 
+class EmbeddingNotReady(Exception):
+    """embedding 服务尚未就绪（infinity 子进程未 LISTEN / 远程 API 不可达）。
+
+    装机后用户立刻点重建会撞到此竞态：infinity 刚 start，warmup 30-60s 才 LISTEN。
+    rebuild 是 strict 模式，第一条 chunk embed connection refused 就抹掉旧索引备份白跑一趟。
+    runner 进 RUNNING 状态之前拦截，调用方转 503 让用户等 banner 显示 ready。
+    """
+
+
 @dataclass
 class RebuildState:
     status: str = RebuildStatus.IDLE.value
@@ -133,12 +142,23 @@ class RebuildRunner:
         rebuild_fn: Optional[Callable[..., Any]] = None,
         backup_fn: Callable[[str, str], Optional[str]] = _default_backup_fn,
         restore_fn: Callable[[str, str], None] = _default_restore_fn,
+        probe_fn: Optional[Callable[[Any], None]] = None,
     ) -> RebuildState:
         """启动后台 rebuild；并发已运行 → RebuildAlreadyRunning。
 
         ``rebuild_fn`` 可注入（测试用 stub 绕开真实 embedding 服务）；默认
         ``scripts.rebuild_vector_index.rebuild_index``。
+
+        ``probe_fn(vector_index) -> None``：embedding 服务就绪探针。默认 None 时
+        走 :func:`_default_embedding_probe`（ApiEmbedding 才探 HTTP /health）。
+        探针失败抛 :class:`EmbeddingNotReady`，runner 不进 RUNNING 状态、不写
+        maintenance flag、不删旧索引——调用方转 503 让用户等 banner ready 再点。
         """
+        # 探针放在持锁外：HTTP 调用最长 2s，挡住单实例锁会让 status 接口卡顿。
+        # ready 后再进锁判断 is_running，单实例语义不受影响。
+        probe = probe_fn or _default_embedding_probe
+        probe(vector_index)
+
         with self._lock:
             if self.is_running():
                 raise RebuildAlreadyRunning(
@@ -275,6 +295,36 @@ class RebuildRunner:
                     self._maintenance.clear()
                 except Exception:
                     logger.exception("rebuild finally: maintenance.clear() failed")
+
+
+def _default_embedding_probe(vector_index: Any) -> None:
+    """默认 embedding 就绪探针：ApiEmbedding 才探 HTTP，HashEmbedding 跳过。
+
+    HashEmbedding 兜底场景由 rebuild_index 自身的 strict 校验拦截（拒重建），
+    这里不重复。ApiEmbedding 走 GET ``{base_url}/health`` 2s 超时，连不上抛
+    :class:`EmbeddingNotReady`。
+    """
+    # 延迟 import 避免循环依赖（vector_index 不依赖 services）。
+    from app.vector_index import ApiEmbedding
+    import httpx
+
+    embedding = getattr(vector_index, "embedding", None)
+    if not isinstance(embedding, ApiEmbedding):
+        return
+
+    base_url = embedding.config.base_url
+    try:
+        with httpx.Client(timeout=2.0) as client:
+            resp = client.get(f"{base_url}/health")
+        if resp.status_code >= 500:
+            raise EmbeddingNotReady(
+                f"embedding 服务 {base_url} 返回 {resp.status_code}，请等服务就绪后再重建"
+            )
+    except httpx.HTTPError as exc:
+        raise EmbeddingNotReady(
+            f"embedding 服务 {base_url} 不可达（{exc.__class__.__name__}），"
+            "请等托盘 banner 显示 ready 后再重建"
+        ) from exc
 
 
 _singleton: Optional[RebuildRunner] = None

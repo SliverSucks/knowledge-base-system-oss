@@ -254,12 +254,12 @@ def client(tmp_path, monkeypatch):
 
 def test_put_system_config_invalidates_repo_singleton(client):
     """改完 /settings 必须让 repo 单例失效，下次 get_repo 拿新 VectorIndex。"""
-    from app.main import _repo_singleton_sqlite
+    from app.main import _repo_singletons
 
-    # 先触发一次 GET 让 lru_cache 命中
+    # 先触发一次 GET 让单例池命中
     resp = client.get("/v1/system/config")
     assert resp.status_code == 200
-    assert _repo_singleton_sqlite.cache_info().currsize == 1
+    assert len(_repo_singletons) == 1
 
     # PUT 改配置：必填 api_base_url + grafana_url（min_length=1），其余字段用默认。
     put_resp = client.put("/v1/system/config", json={
@@ -271,5 +271,5 @@ def test_put_system_config_invalidates_repo_singleton(client):
     })
     assert put_resp.status_code == 200, put_resp.text
 
-    # 关键断言：lru_cache 已被清空，下次 get_repo 会重建
-    assert _repo_singleton_sqlite.cache_info().currsize == 0
+    # 关键断言：单例池已被清空，下次 get_repo 会重建
+    assert len(_repo_singletons) == 0

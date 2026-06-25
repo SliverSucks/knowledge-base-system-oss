@@ -4,8 +4,8 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 from datetime import datetime, timezone
-from functools import lru_cache
 from pathlib import Path as FilePath
 from typing import Any, Protocol
 
@@ -42,6 +42,7 @@ from app.services.install_progress import (
     resolve_install_paths,
 )
 from app.services.rebuild_runner import (
+    EmbeddingNotReady,
     RebuildAlreadyRunning,
     get_rebuild_runner,
 )
@@ -337,22 +338,40 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-@lru_cache(maxsize=1)
+# repo 单例池：从 lru_cache 改成手写 dict + Lock，让 invalidate 能拿到旧实例
+# 显式 pause 旧 VectorIndex 释放 qdrant_local portalocker 锁。lru_cache 只能 cache_clear
+# 不暴露旧值，导致 mode 切换后旧 client 不 close、新 client 在同进程内 AlreadyLocked，
+# 新 VectorIndex 静默退化到 enabled=False。
+_repo_singletons: dict[tuple[str, str], Any] = {}
+_repo_singletons_lock = threading.Lock()
+
+
 def _repo_singleton_postgres(database_url: str) -> Any:
-    from app.repository_postgres import PostgresKnowledgeRepo
-    # 一段式 init：先 repo(vector_index=None) → 读 DB 配置 → 一次 from_env(db_cfg=)，
-    # 避免两段式重复创建 VectorIndex / Qdrant client 导致资源浪费与潜在锁冲突。
-    repo = PostgresKnowledgeRepo(database_url=database_url, vector_index=None)
-    repo.vector_index = VectorIndex.from_repo(repo)
-    return repo
+    key = ("postgres", database_url)
+    with _repo_singletons_lock:
+        existing = _repo_singletons.get(key)
+        if existing is not None:
+            return existing
+        from app.repository_postgres import PostgresKnowledgeRepo
+        # 一段式 init：先 repo(vector_index=None) → 读 DB 配置 → 一次 from_env(db_cfg=)，
+        # 避免两段式重复创建 VectorIndex / Qdrant client 导致资源浪费与潜在锁冲突。
+        repo = PostgresKnowledgeRepo(database_url=database_url, vector_index=None)
+        repo.vector_index = VectorIndex.from_repo(repo)
+        _repo_singletons[key] = repo
+        return repo
 
 
-@lru_cache(maxsize=1)
 def _repo_singleton_sqlite(sqlite_path: str) -> Any:
-    from app.repository_sqlite import SqliteKnowledgeRepo
-    repo = SqliteKnowledgeRepo(sqlite_path=sqlite_path, vector_index=None)
-    repo.vector_index = VectorIndex.from_repo(repo)
-    return repo
+    key = ("sqlite", sqlite_path)
+    with _repo_singletons_lock:
+        existing = _repo_singletons.get(key)
+        if existing is not None:
+            return existing
+        from app.repository_sqlite import SqliteKnowledgeRepo
+        repo = SqliteKnowledgeRepo(sqlite_path=sqlite_path, vector_index=None)
+        repo.vector_index = VectorIndex.from_repo(repo)
+        _repo_singletons[key] = repo
+        return repo
 
 
 def _invalidate_repo_singletons() -> None:
@@ -360,9 +379,29 @@ def _invalidate_repo_singletons() -> None:
 
     用户在 /settings 修改 embedding / rerank / llm 配置后调用，
     让新配置立刻生效，不再要求重启服务。
+
+    关键：单纯 dict.clear() 等于 lru_cache.cache_clear()，旧 VectorIndex 仍持有
+    qdrant_local 的 portalocker 文件锁，下次 get_repo 重建时同进程 AlreadyLocked
+    → 新 VectorIndex 静默 enabled=False 退化为关键词检索。这里先 pause 释放锁。
     """
-    _repo_singleton_sqlite.cache_clear()
-    _repo_singleton_postgres.cache_clear()
+    with _repo_singletons_lock:
+        old = list(_repo_singletons.values())
+        _repo_singletons.clear()
+    for repo in old:
+        vi = getattr(repo, "vector_index", None)
+        if vi is None:
+            continue
+        try:
+            vi.pause()  # close client + 阻止懒重连；新 repo 会拿到新的 VectorIndex
+        except Exception:
+            logger.warning("invalidate: vector_index.pause failed", exc_info=True)
+
+
+# 测试 fixture 历史上用 ``_repo_singleton_sqlite.cache_clear()`` 复位单例（lru_cache 时代）。
+# 切到 dict + Lock 之后保留同名属性指向 invalidate，让既有测试无需 patch；语义一致：都是清池
+# + 释放资源（dict 版本多做 pause 旧 vector_index 释放 qdrant 锁，对测试是更强的保证）。
+_repo_singleton_sqlite.cache_clear = _invalidate_repo_singletons  # type: ignore[attr-defined]
+_repo_singleton_postgres.cache_clear = _invalidate_repo_singletons  # type: ignore[attr-defined]
 
 
 def _resolve_backend() -> str:
@@ -1113,6 +1152,14 @@ def post_rebuild_vector_index(
         snap = runner.start(**start_kwargs)
     except RebuildAlreadyRunning as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except EmbeddingNotReady as exc:
+        # 装机 + warmup 期间用户抢点 → 503 + Retry-After 让壳层稍后重试或提示等待。
+        # 关键：rebuild_runner.start 在探针前未进 RUNNING / 未触发 backup，旧索引完整。
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+            headers={"Retry-After": "5"},
+        ) from exc
 
     return {
         "task_id": snap.task_id,

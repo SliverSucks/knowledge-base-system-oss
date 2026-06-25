@@ -426,6 +426,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCent
                         title: "重建无法启动",
                         message: "请先在「设置」页配置可用的 embedding 服务。详情：\(String(bodyText.prefix(160)))"
                     )
+                case 503:
+                    // embedding 服务还没就绪（infinity 装机后 warmup 30-60s 才 LISTEN）。
+                    // 后端拒在进 RUNNING 之前，旧索引完好；提示用户等 banner ready。
+                    self.notify(
+                        title: "embedding 服务尚未就绪",
+                        message: "请等托盘 banner 显示 ready 后再点重建（通常装机后 30-60 秒）。"
+                    )
                 default:
                     self.notify(
                         title: "重建启动失败",
